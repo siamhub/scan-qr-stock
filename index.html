@@ -2,20 +2,24 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>ระบบสแกน QR Code บันทึกสินค้า</title>
-  <script src="https://cloudflare.com"></script>
+  <!-- โหลดไลบรารีเวอร์ชันล่าสุดที่รองรับเบราว์เซอร์ยุคใหม่ -->
+  <script src="https://cloudflare.com" integrity="sha512-r6rDA7W6ZeQhvl8S7yRVQUKVV234Cp0pVIFz8gL4xbS47cC2W7GQHECp3cONYu5ypJgwkWcM81LOin9ssVbASg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; background-color: #f9f9f9; }
-    #reader { width: 100%; min-height: 250px; background: #eee; border: 2px dashed #ccc; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
-    .form-group { margin-bottom: 12px; }
-    label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-    input { width: 100%; padding: 10px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
-    input[readonly] { background-color: #e9ecef; color: #495057; }
-    .btn { width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f4f6f9; color: #333; }
+    h3 { text-align: center; margin-bottom: 20px; color: #1a73e8; }
+    #reader { width: 100%; min-height: 280px; background: #000; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+    input { width: 100%; padding: 12px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; }
+    input[readonly] { background-color: #e9ecef; color: #495057; border: 1px solid #dee2e6; }
+    .btn { width: 100%; padding: 14px; font-size: 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: background 0.2s; }
     .btn-camera { background: #28a745; color: white; }
+    .btn-camera:hover { background: #218838; }
     .btn-stop { background: #dc3545; color: white; display: none; }
-    .btn-submit { background: #007bff; color: white; margin-top: 10px; }
+    .btn-submit { background: #1a73e8; color: white; margin-top: 15px; width: 100%; box-shadow: 0 2px 4px rgba(26,115,232,0.3); }
+    .btn-submit:hover { background: #1557b0; }
     .loading-text { color: #f39c12; font-size: 14px; font-style: italic; display: none; }
   </style>
 </head>
@@ -33,7 +37,7 @@
       <input type="text" id="productCode" readonly required placeholder="กดเปิดกล้องเพื่อสแกน">
     </div>
     <div class="form-group">
-      <label>ชื่อสินค้า: <span id="loadingName" class="loading-text">กำลังค้นหาชื่อสินค้า...</span></label>
+      <label>ชื่อสินค้า: <span id="loadingName" class="loading-text">กำลังค้นหา...</span></label>
       <input type="text" id="productName" readonly required placeholder="ชื่อสินค้าจะขึ้นอัตโนมัติ">
     </div>
     <div class="form-group">
@@ -48,28 +52,35 @@
   </form>
 
   <script>
-    // 🌟 นำ URL ที่คัดลอกมาจากขั้นตอน Deploy หลังบ้าน (ลงท้ายด้วย /exec) มาวางแทนข้อความนี้
+    // 🌟 ใส่ URL ของ Google Apps Script ที่ลงท้ายด้วย /exec ของคุณตรงนี้ตามเดิม
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXWBeHnUNvztQESMyGi0KM1GCM_OVkkn4DtBxOkExE7-1X3Z3HprBdO02Ge9n6FUTU/exec"; 
 
     let html5QrCode;
+    const cameraId = "reader";
 
     document.getElementById('btnStart').addEventListener('click', function() {
-      html5QrCode = new Html5Qrcode("reader");
+      // เคลียร์องค์ประกอบเก่าก่อนสร้างตัวสแกนใหม่ เพื่อป้องกันอินสแตนซ์ซ้ำซ้อน
+      if (html5QrCode) {
+        html5QrCode.clear();
+      }
+      
+      html5QrCode = new Html5Qrcode(cameraId);
+      
+      // บังคับเจาะจงขอกล้องหลังโดยใช้นโยบายความปลอดภัยปี 2026
       html5QrCode.start(
-        { facingMode: "environment" }, // บังคับใช้กล้องหลังมือถือ
-        { fps: 10, qrbox: 250 },
+        { facingMode: { exact: "environment" } }, 
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
           document.getElementById('productCode').value = decodedText;
           document.getElementById('loadingName').style.display = 'inline';
           document.getElementById('productName').value = '';
           
-          // ค้นหาชื่อสินค้าผ่าน API หลังบ้าน
           fetch(`${WEB_APP_URL}?code=${encodeURIComponent(decodedText)}`)
             .then(res => res.json())
             .then(data => {
               document.getElementById('productName').value = data.productName;
               document.getElementById('loadingName').style.display = 'none';
-              stopCamera(); // สแกนเจอแล้วปิดกล้องเพื่อประหยัดแบต
+              stopCamera(); 
             })
             .catch(err => {
               alert("เชื่อมต่อหลังบ้านล้มเหลว");
@@ -80,7 +91,33 @@
       ).then(() => {
         document.getElementById('btnStart').style.display = 'none';
         document.getElementById('btnStop').style.display = 'block';
-      }).catch(err => alert("ไม่สามารถเข้าถึงกล้องได้: " + err));
+      }).catch(err => {
+        // หากมือถือไม่มีกล้องหลังแบบ exact ให้ถอยกลับไปใช้โหมดสภาพแวดล้อมทั่วไปแทน
+        console.log("ถอยกลับไปใช้ facingMode แบบทั่วไป");
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            document.getElementById('productCode').value = decodedText;
+            document.getElementById('loadingName').style.display = 'inline';
+            document.getElementById('productName').value = '';
+            
+            fetch(`${WEB_APP_URL}?code=${encodeURIComponent(decodedText)}`)
+              .then(res => res.json())
+              .then(data => {
+                document.getElementById('productName').value = data.productName;
+                document.getElementById('loadingName').style.display = 'none';
+                stopCamera();
+              });
+          },
+          (error) => {}
+        ).then(() => {
+          document.getElementById('btnStart').style.display = 'none';
+          document.getElementById('btnStop').style.display = 'block';
+        }).catch(e => {
+          alert("ไม่สามารถเข้าถึงกล้องได้จริง ๆ กรุณาเช็กการอนุญาตสิทธิ์ในบราวเซอร์ของคุณ: " + e);
+        });
+      });
     });
 
     document.getElementById('btnStop').addEventListener('click', stopCamera);
@@ -91,7 +128,7 @@
           document.getElementById('btnStart').style.display = 'block';
           document.getElementById('btnStop').style.display = 'none';
           document.getElementById('reader').innerHTML = '';
-        });
+        }).catch(err => console.error("Failed to stop", err));
       }
     }
 
@@ -111,7 +148,6 @@
         recorder: document.getElementById('recorder').value
       };
       
-      // ส่งข้อมูลไปบันทึกที่ Google Sheets ผ่าน POST API
       fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify(data) })
         .then(res => res.json())
         .then(resData => {
@@ -119,7 +155,6 @@
           document.getElementById('productCode').value = '';
           document.getElementById('productName').value = '';
           document.getElementById('qty').value = '1';
-          // ชื่อผู้บันทึกจะไม่ถูกล้างค่า เพื่อให้คีย์งานต่อเนื่องได้สะดวก
         }).catch(err => alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"));
     });
   </script>

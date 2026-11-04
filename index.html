@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบสแกน QR Code บันทึกสินค้า</title>
+  <script src="https://cloudflare.com"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; background-color: #f9f9f9; }
+    #reader { width: 100%; min-height: 250px; background: #eee; border: 2px dashed #ccc; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+    input { width: 100%; padding: 10px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+    input[readonly] { background-color: #e9ecef; color: #495057; }
+    .btn { width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+    .btn-camera { background: #28a745; color: white; }
+    .btn-stop { background: #dc3545; color: white; display: none; }
+    .btn-submit { background: #007bff; color: white; margin-top: 10px; }
+    .loading-text { color: #f39c12; font-size: 14px; font-style: italic; display: none; }
+  </style>
+</head>
+<body>
+
+  <h3>📸 ระบบสแกน QR Code บันทึกสินค้า</h3>
+  
+  <div id="reader"></div>
+  <button type="button" id="btnStart" class="btn btn-camera">📷 เปิดกล้องสแกน QR Code</button>
+  <button type="button" id="btnStop" class="btn btn-stop">🛑 ปิดกล้อง</button>
+
+  <form id="scanForm">
+    <div class="form-group">
+      <label>รหัสสินค้า:</label>
+      <input type="text" id="productCode" readonly required placeholder="กดเปิดกล้องเพื่อสแกน">
+    </div>
+    <div class="form-group">
+      <label>ชื่อสินค้า: <span id="loadingName" class="loading-text">กำลังค้นหาชื่อสินค้า...</span></label>
+      <input type="text" id="productName" readonly required placeholder="ชื่อสินค้าจะขึ้นอัตโนมัติ">
+    </div>
+    <div class="form-group">
+      <label>จำนวนสินค้า:</label>
+      <input type="number" id="qty" required value="1" min="1">
+    </div>
+    <div class="form-group">
+      <label>ชื่อผู้บันทึกข้อมูล:</label>
+      <input type="text" id="recorder" required placeholder="ระบุชื่อผู้บันทึก">
+    </div>
+    <button type="submit" class="btn btn-submit">💾 บันทึกข้อมูลสินค้า</button>
+  </form>
+
+  <script>
+    // 🌟 นำ URL ที่คัดลอกมาจากขั้นตอน Deploy หลังบ้าน (ลงท้ายด้วย /exec) มาวางแทนข้อความนี้
+    const WEB_APP_URL = "วาง_URL_ที่ลงท้ายด้วย_/exec_ของคุณตรงนี้"; 
+
+    let html5QrCode;
+
+    document.getElementById('btnStart').addEventListener('click', function() {
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" }, // บังคับใช้กล้องหลังมือถือ
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          document.getElementById('productCode').value = decodedText;
+          document.getElementById('loadingName').style.display = 'inline';
+          document.getElementById('productName').value = '';
+          
+          // ค้นหาชื่อสินค้าผ่าน API หลังบ้าน
+          fetch(`${WEB_APP_URL}?code=${encodeURIComponent(decodedText)}`)
+            .then(res => res.json())
+            .then(data => {
+              document.getElementById('productName').value = data.productName;
+              document.getElementById('loadingName').style.display = 'none';
+              stopCamera(); // สแกนเจอแล้วปิดกล้องเพื่อประหยัดแบต
+            })
+            .catch(err => {
+              alert("เชื่อมต่อหลังบ้านล้มเหลว");
+              document.getElementById('loadingName').style.display = 'none';
+            });
+        }, 
+        (error) => {}
+      ).then(() => {
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('btnStop').style.display = 'block';
+      }).catch(err => alert("ไม่สามารถเข้าถึงกล้องได้: " + err));
+    });
+
+    document.getElementById('btnStop').addEventListener('click', stopCamera);
+    
+    function stopCamera() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+          document.getElementById('btnStart').style.display = 'block';
+          document.getElementById('btnStop').style.display = 'none';
+          document.getElementById('reader').innerHTML = '';
+        });
+      }
+    }
+
+    document.getElementById('scanForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var productName = document.getElementById('productName').value;
+      
+      if (productName === "ไม่พบข้อมูลสินค้า" || productName === "") {
+        alert("ไม่พบรหัสสินค้านี้ในระบบ ไม่สามารถบันทึกได้"); 
+        return;
+      }
+      
+      var data = {
+        productCode: document.getElementById('productCode').value,
+        productName: productName,
+        qty: document.getElementById('qty').value,
+        recorder: document.getElementById('recorder').value
+      };
+      
+      // ส่งข้อมูลไปบันทึกที่ Google Sheets ผ่าน POST API
+      fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify(data) })
+        .then(res => res.json())
+        .then(resData => {
+          alert(resData.message);
+          document.getElementById('productCode').value = '';
+          document.getElementById('productName').value = '';
+          document.getElementById('qty').value = '1';
+          // ชื่อผู้บันทึกจะไม่ถูกล้างค่า เพื่อให้คีย์งานต่อเนื่องได้สะดวก
+        }).catch(err => alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"));
+    });
+  </script>
+</body>
+</html>

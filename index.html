@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ระบบสแกน QR Code บันทึกสินค้า</title>
-  <!-- 🌟 แก้ไข: โหลดไลบรารี jsQR เวอร์ชันเต็มที่ถูกต้อง -->
-  <script src="https://jsdelivr.net"></script>
+  <!-- โหลดไลบรารีผ่าน CDN ที่เสถียรที่สุด -->
+  <script src="https://cloudflare.com"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f4f6f9; color: #333; }
     h3 { text-align: center; margin-bottom: 15px; color: #1a73e8; }
-    #video-container { width: 100%; position: relative; margin-bottom: 15px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15); border-radius: 12px; overflow: hidden; }
-    video { width: 100%; height: auto; display: block; background: #000; }
+    #video-container { width: 100%; position: relative; margin-bottom: 15px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15); border-radius: 12px; overflow: hidden; background: #000; }
+    video { width: 100%; height: auto; display: block; }
     .form-group { margin-bottom: 12px; }
     label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
     input { width: 100%; padding: 12px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; }
@@ -54,8 +54,7 @@
   </form>
 
   <script>
-    // 🌟 ใส่ URL ของ Google Apps Script ที่ลงท้ายด้วย /exec ของคุณตามเดิม
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXWBeHnUNvztQESMyGi0KM1GCM_OVkkn4DtBxOkExE7-1X3Z3HprBdO02Ge9n6FUTU/exec"; 
+    const WEB_APP_URL = "https://google.com"; 
 
     const video = document.getElementById("video");
     const videoContainer = document.getElementById("video-container");
@@ -64,11 +63,18 @@
     
     let localStream = null;
     let scanning = false;
+    let canvasElement = document.createElement("canvas");
+    let canvasCtx = canvasElement.getContext("2d");
 
     btnStart.addEventListener('click', async function() {
       try {
+        // ใช้โครงสร้างดึงกล้องหลังที่เสถียรที่สุด รองรับทั้ง iOS และ Android
         const constraints = {
-          video: { facingMode: "environment" }
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
         };
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -84,7 +90,7 @@
         
         requestAnimationFrame(tick);
       } catch (err) {
-        alert("⚠️ ไม่สามารถเปิดกล้องสแกนสดได้: " + err.name + "\nกรุณาตรวจสอบการตั้งค่าสิทธิ์อนุญาตกล้องในเบราว์เซอร์ของคุณ");
+        alert("⚠️ ไม่สามารถเปิดกล้องได้: " + err.name + "\nกรุณาตรวจสอบการตั้งค่าสิทธิ์กล้อง");
       }
     });
 
@@ -103,26 +109,26 @@
 
     function tick() {
       if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // ดึงสัดส่วนขนาดวิดีโอจริงจากหน้ากล้องเพื่อความแม่นยำสูงในการแกะพิกเซล QR
+        canvasElement.height = video.videoHeight;
+        canvasElement.width = video.videoWidth;
         
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+        var imageData = canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height);
         
-        // เรียกใช้ฟังก์ชันจากไลบรารีที่โหลดมาอย่างถูกต้อง
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        // ฟังก์ชันถอดรหัสภาพเป็นข้อความ
+        var code = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert",
         });
 
-        if (code) {
+        if (code && code.data.trim() !== "") {
           document.getElementById('productCode').value = code.data;
           document.getElementById('loadingName').style.display = 'inline';
           document.getElementById('productName').value = '';
           
-          stopScanner(); 
+          stopScanner(); // อ่านสำเร็จแล้ว สั่งปิดกล้องทันที
 
+          // ยิง API ค้นหาชื่อสินค้า
           fetch(`${WEB_APP_URL}?code=${encodeURIComponent(code.data)}`)
             .then(res => res.json())
             .then(data => {
@@ -136,8 +142,12 @@
           return;
         }
       }
+      
+      // หน่วงเวลาการวนลูปสแกนภาพเล็กน้อย (ทุกๆ 60 มิลลิวินาที) เพื่อป้องกันไม่ให้ CPU เครื่องทำงานหนักจนภาพกระตุก
       if (scanning) {
-        requestAnimationFrame(tick);
+        setTimeout(function() {
+          requestAnimationFrame(tick);
+        }, 60);
       }
     }
 
@@ -156,7 +166,6 @@
         recorder: document.getElementById('recorder').value
       };
       
-      // 🌟 แก้ไข: ส่งข้อมูลผ่านโหมด 'no-cors' และเปลี่ยน Content-Type เป็น text/plain เพื่อป้องกันการบล็อก CORS ของ Google Apps Script
       fetch(WEB_APP_URL, { 
         method: "POST", 
         mode: "no-cors",
@@ -166,7 +175,6 @@
         body: JSON.stringify(data) 
       })
       .then(() => {
-        // เนื่องจากโหมด no-cors จะอ่านข้อความตอบกลับตรงๆ ไม่ได้ แต่ระบบสามารถรับส่งข้อมูลเข้า Google Sheets สำเร็จแน่นอน 100%
         alert("ส่งข้อมูลบันทึกสำเร็จ!");
         document.getElementById('productCode').value = '';
         document.getElementById('productName').value = '';

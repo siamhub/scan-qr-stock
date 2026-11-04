@@ -2,46 +2,43 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>ระบบบันทึกสินค้าผ่านภาพถ่าย QR Code</title>
-  <!-- โหลดไลบรารีวิเคราะห์รูปภาพ QR Code (jsQR) -->
-  <script src="https://jsdelivr.net"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบสแกน QR Code บันทึกสินค้า</title>
+  <!-- โหลดไลบรารีสแกนสดความเร็วสูงเวอร์ชันเสถียรล่าสุด -->
+  <script src="https://unpkg.com" type="text/javascript"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f4f6f9; color: #333; }
-    h3 { text-align: center; margin-bottom: 20px; color: #1a73e8; }
-    .camera-box { background: #fff; padding: 20px; border-radius: 12px; text-align: center; border: 2px dashed #1a73e8; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .form-group { margin-bottom: 15px; }
-    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+    h3 { text-align: center; margin-bottom: 15px; color: #1a73e8; }
+    #interactive-reader { width: 100%; min-height: 250px; background: #000; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
     input { width: 100%; padding: 12px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; }
     input[readonly] { background-color: #e9ecef; color: #495057; border: 1px solid #dee2e6; }
-    .file-input { display: none; }
-    .btn { width: 100%; padding: 14px; font-size: 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; display: inline-block; box-sizing: border-box; text-align: center; }
+    .btn { width: 100%; padding: 14px; font-size: 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
     .btn-camera { background: #28a745; color: white; margin-bottom: 10px; }
-    .btn-submit { background: #1a73e8; color: white; margin-top: 15px; box-shadow: 0 2px 4px rgba(26,115,232,0.3); }
+    .btn-stop { background: #dc3545; color: white; display: none; margin-bottom: 10px; }
+    .btn-submit { background: #1a73e8; color: white; margin-top: 10px; box-shadow: 0 2px 4px rgba(26,115,232,0.3); }
     .loading-text { color: #f39c12; font-size: 14px; font-style: italic; display: none; }
-    #preview-img { max-width: 100%; max-height: 150px; margin-top: 10px; border-radius: 6px; display: none; }
   </style>
 </head>
 <body>
 
-  <h3>📸 ระบบบันทึกสินค้าจากภาพถ่าย QR</h3>
+  <h3>🎥 ระบบสแกน QR Code สดผ่านเว็บ</h3>
   
-  <div class="camera-box">
-    <label for="qr-file-input" class="btn btn-camera">📷 กดเปิดกล้องเพื่อถ่ายภาพ / เลือกรูป</label>
-    <!-- ใช้แคปเจอร์เพื่อบังคับเปิดแอปกล้องถ่ายรูปหลักของระบบปฏิบัติการโดยตรง -->
-    <input type="file" id="qr-file-input" class="file-input" accept="image/*" capture="environment">
-    <div id="scan-status" style="font-size: 14px; color: #666;">กดปุ่มด้านบน ถ่ายรูปคิวอาร์ให้ชัดเจน</div>
-    <img id="preview-img" alt="Preview">
-  </div>
+  <!-- กล่องสแกนสดจากกล้อง -->
+  <div id="interactive-reader"></div>
+  
+  <button type="button" id="btnStartScan" class="btn btn-camera">📷 เปิดกล้องสแกนสด</button>
+  <button type="button" id="btnStopScan" class="btn btn-stop">🛑 ปิดกล้อง</button>
 
   <form id="scanForm">
     <div class="form-group">
       <label>รหัสสินค้า:</label>
-      <input type="text" id="productCode" readonly required placeholder="รอประมวลผลจากการถ่ายภาพ">
+      <input type="text" id="productCode" readonly required placeholder="รอผลการสแกน QR Code...">
     </div>
     <div class="form-group">
       <label>ชื่อสินค้า: <span id="loadingName" class="loading-text">กำลังค้นหาชื่อ...</span></label>
-      <input type="text" id="productName" readonly required placeholder="ชื่อสินค้าจะขึ้นอัตโนมัติ">
+      <input type="text" id="productName" readonly required placeholder="ชื่อสินค้าจะแสดงอัตโนมัติ">
     </div>
     <div class="form-group">
       <label>จำนวนสินค้า:</label>
@@ -55,75 +52,66 @@
   </form>
 
   <script>
-    // 🌟 ใส่ URL ของ Google Apps Script ที่ลงท้ายด้วย /exec ของคุณตรงนี้ตามเดิม
+    // 🌟 เอา URL ของ Google Apps Script ที่ลงท้ายด้วย /exec มาใส่แทนข้อความนี้ตามเดิม
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXWBeHnUNvztQESMyGi0KM1GCM_OVkkn4DtBxOkExE7-1X3Z3HprBdO02Ge9n6FUTU/exec"; 
 
-    const fileInput = document.getElementById('qr-file-input');
-    const scanStatus = document.getElementById('scan-status');
-    const previewImg = document.getElementById('preview-img');
+    let html5QrCodeScanner;
 
-    fileInput.addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      scanStatus.innerText = "⏳ กำลังประมวลผลรูปภาพ...";
+    document.getElementById('btnStartScan').addEventListener('click', function() {
+      // เรียกใช้โครงสร้างกล้องผ่านตัวจัดการ API ความปลอดภัยสูงของ html5-qrcode
+      html5QrCodeScanner = new Html5Qrcode("interactive-reader");
       
-      // แสดงรูปภาพตัวอย่างสั้น ๆ
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        previewImg.src = event.target.result;
-        previewImg.style.display = "inline-block";
-
-        // สร้าง Object รูปภาพเพื่อโยนเข้า Canvas ค้นหาคิวอาร์
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          canvas.width = img.width;
-          canvas.height = img.height;
-          context.drawImage(img, 0, 0, img.width, img.height);
+      const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+      
+      // บังคับการดึงสิทธิ์กล้องหลังแบบเรียบง่ายและปลอดภัยสูงสุด
+      html5QrCodeScanner.start(
+        { facingMode: "environment" }, 
+        config,
+        (decodedText) => {
+          // เมื่อสแกนคิวอาร์สดสำเร็จ
+          document.getElementById('productCode').value = decodedText;
+          document.getElementById('loadingName').style.display = 'inline';
+          document.getElementById('productName').value = '';
           
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          // ทำการถอดรหัสภาพถ่ายด้วยไลบรารี jsQR
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
-          });
-
-          if (code) {
-            document.getElementById('productCode').value = code.data;
-            document.getElementById('loadingName').style.display = 'inline';
-            document.getElementById('productName').value = '';
-            scanStatus.innerHTML = "✅ <span style='color:green;'>ถอดรหัสคิวอาร์สำเร็จ!</span>";
-
-            // ดึงชื่อสินค้าจากหลังบ้านกูเกิลชีต
-            fetch(`${WEB_APP_URL}?code=${encodeURIComponent(code.data)}`)
-              .then(res => res.json())
-              .then(data => {
-                document.getElementById('productName').value = data.productName;
-                document.getElementById('loadingName').style.display = 'none';
-              })
-              .catch(err => {
-                alert("เชื่อมต่อระบบหลังบ้านล้มเหลว");
-                document.getElementById('loadingName').style.display = 'none';
-              });
-          } else {
-            scanStatus.innerHTML = "❌ <span style='color:red;'>ไม่พบ QR Code ในภาพ กรุณาถ่ายใหม่อีกครั้งให้ชัดเจนขึ้น</span>";
-            document.getElementById('productCode').value = '';
-            document.getElementById('productName').value = '';
-          }
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
+          // ส่งข้อความไปเช็กชื่อสินค้า
+          fetch(`${WEB_APP_URL}?code=${encodeURIComponent(decodedText)}`)
+            .then(res => res.json())
+            .then(data => {
+              document.getElementById('productName').value = data.productName;
+              document.getElementById('loadingName').style.display = 'none';
+              stopScanner(); // ค้นหาเจอแล้ว สั่งปิดวิดีโอกล้องสดทันที
+            })
+            .catch(err => {
+              alert("ดึงข้อมูลชื่อสินค้าล้มเหลว");
+              document.getElementById('loadingName').style.display = 'none';
+            });
+        },
+        (errorMessage) => { /* ปล่อยให้ลูปสแกนเฟรมต่อไปทำงานต่อเนื่อง */ }
+      ).then(() => {
+        document.getElementById('btnStartScan').style.display = 'none';
+        document.getElementById('btnStopScan').style.display = 'block';
+      }).catch(err => {
+        alert("⚠️ บราวเซอร์ไม่ยอมให้เปิดกล้องสแกนสด\n\nวิธีแก้:\n1. ตรวจสอบว่าเปิดผ่าน HTTPS\n2. ต้องก๊อปปี้ลิงก์ไปเปิดใน Google Chrome หรือ Safari ตรง ๆ เท่านั้น (ห้ามเปิดผ่านแอป LINE)");
+      });
     });
+
+    document.getElementById('btnStopScan').addEventListener('click', stopScanner);
+    
+    function stopScanner() {
+      if (html5QrCodeScanner && html5QrCodeScanner.isScanning) {
+        html5QrCodeScanner.stop().then(() => {
+          document.getElementById('btnStartScan').style.display = 'block';
+          document.getElementById('btnStopScan').style.display = 'none';
+          document.getElementById('interactive-reader').innerHTML = '';
+        }).catch(err => console.error(err));
+      }
+    }
 
     document.getElementById('scanForm').addEventListener('submit', function(e) {
       e.preventDefault();
       var productName = document.getElementById('productName').value;
-      
       if (productName === "ไม่พบข้อมูลสินค้า" || productName === "") {
-        alert("กรุณาถ่ายภาพคิวอาร์โค้ดที่มีข้อมูลตรงกับระบบก่อนบันทึก"); 
-        return;
+        alert("กรุณาสแกนรหัสสินค้าที่มีในระบบตารางก่อนกดบันทึก"); return;
       }
       
       var data = {
@@ -140,8 +128,6 @@
           document.getElementById('productCode').value = '';
           document.getElementById('productName').value = '';
           document.getElementById('qty').value = '1';
-          previewImg.style.display = "none";
-          scanStatus.innerText = "กดปุ่มด้านบน ถ่ายรูปคิวอาร์ให้ชัดเจน";
         }).catch(err => alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"));
     });
   </script>

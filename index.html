@@ -4,15 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ระบบสแกน QR Code บันทึกสินค้า</title>
-  <!-- โหลดไลบรารีสแกนตัวเต็มที่มีกรอบช่วยเล็งและออโต้โฟกัส -->
-  <script src="https://unpkg.com" type="text/javascript"></script>
+  <!-- โหลดไลบรารีวิเคราะห์คิวอาร์สดความเร็วสูง -->
+  <script src="https://jsdelivr.net"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f4f6f9; color: #333; }
     h3 { text-align: center; margin-bottom: 15px; color: #1a73e8; }
-    #reader { width: 100%; background: #000; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
-    /* ซ่อนปุ่มเริ่มต้นของไลบรารีเพื่อใช้ปุ่มของเราควบคุมแทน */
-    #reader button { display: none !important; }
-    #reader__dashboard { display: none !important; }
+    #video-container { width: 100%; position: relative; margin-bottom: 15px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15); border-radius: 12px; overflow: hidden; }
+    video { width: 100%; height: auto; display: block; background: #000; }
     .form-group { margin-bottom: 12px; }
     label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
     input { width: 100%; padding: 12px; box-sizing: border-box; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; }
@@ -28,8 +26,10 @@
 
   <h3>🎥 ระบบสแกน QR Code สดผ่านเว็บ</h3>
   
-  <!-- กล่องที่จะแสดงกล้องและกรอบสแกน -->
-  <div id="reader"></div>
+  <!-- แสดงภาพสดจากกล้อง -->
+  <div id="video-container">
+    <video id="video" playsinline></video>
+  </div>
   
   <button type="button" id="btnStart" class="btn btn-camera">📷 เปิดกล้องสแกนสด</button>
   <button type="button" id="btnStop" class="btn btn-stop">🛑 ปิดกล้อง</button>
@@ -55,42 +55,78 @@
   </form>
 
   <script>
-    // 🌟 ใส่ URL ของ Google Apps Script ที่ลงท้ายด้วย /exec ของคุณตรงนี้
+    // 🌟 ใส่ URL ของ Google Apps Script ที่ลงท้ายด้วย /exec ของคุณตรงนี้ตามเดิม
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXWBeHnUNvztQESMyGi0KM1GCM_OVkkn4DtBxOkExE7-1X3Z3HprBdO02Ge9n6FUTU/exec"; 
 
-    let html5QrCode;
+    const video = document.getElementById("video");
+    const videoContainer = document.getElementById("video-container");
     const btnStart = document.getElementById("btnStart");
     const btnStop = document.getElementById("btnStop");
+    
+    let localStream = null;
+    let scanning = false;
 
-    btnStart.addEventListener('click', function() {
-      // สร้างอินสแตนซ์เครื่องสแกน
-      html5QrCode = new Html5Qrcode("reader");
-      
-      // ตั้งค่าคอนฟิก: ความเร็วเฟรม และขนาดของกรอบสแกนสีเขียวกลางจอ
-      const config = { 
-        fps: 20, 
-        qrbox: function(viewfinderWidth, viewfinderHeight) {
-          // ปรับขนาดกล่องช่วยสแกนให้เหมาะกับหน้าจอมือถือ
-          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const fontSize = Math.floor(minEdge * 0.65);
-          return { width: fontSize, height: fontSize };
-        }
-      };
+    btnStart.addEventListener('click', async function() {
+      try {
+        // ใช้คำสั่งพื้นฐานที่สุดที่บราวเซอร์ทุกรุ่นในโลกเปิดสิทธิ์ใช้งานกล้องหลังได้ชัวร์
+        const constraints = {
+          video: { facingMode: "environment" }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStream = stream;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.play();
+        
+        scanning = true;
+        videoContainer.style.display = "block";
+        btnStart.style.display = "none";
+        btnStop.style.display = "block";
+        
+        requestAnimationFrame(tick);
+      } catch (err) {
+        alert("⚠️ ไม่สามารถเปิดกล้องสแกนสดได้: " + err.name + "\nกรุณาตรวจสอบการตั้งค่าสิทธิ์อนุญาตกล้องในเบราว์เซอร์ของคุณ");
+      }
+    });
 
-      // เริ่มทำงานและขอกล้องหลัง
-      html5QrCode.start(
-        { facingMode: "environment" }, 
-        config,
-        (decodedText) => {
-          // 🎉 เมื่ออ่านค่า QR Code สำเร็จอย่างแม่นยำ
-          document.getElementById('productCode').value = decodedText;
+    btnStop.addEventListener('click', stopScanner);
+    
+    function stopScanner() {
+      scanning = false;
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      videoContainer.style.display = "none";
+      btnStart.style.display = "block";
+      btnStop.style.display = "none";
+      video.srcObject = null;
+    }
+
+    // ฟังก์ชันการอ่านเฟรมภาพวิดีโอสดเพื่อค้นหา QR Code ด้วย jsQR แบบ Realtime
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
+        // สร้าง canvas ย่อยในระบบเพื่อจับภาพมาวิเคราะห์
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code) {
+          document.getElementById('productCode').value = code.data;
           document.getElementById('loadingName').style.display = 'inline';
           document.getElementById('productName').value = '';
           
-          stopScanner(); // หยุดใช้งานกล้องทันทีเพื่อประหยัดแบต
+          stopScanner(); // ค้นหาพบแล้วสั่งปิดกล้องประหยัดพลังงานทันที
 
-          // ดึงชื่อสินค้าจาก Google Sheets
-          fetch(`${WEB_APP_URL}?code=${encodeURIComponent(decodedText)}`)
+          // เรียกคำสั่งดึงชื่อสินค้าผ่าน API หลังบ้าน Google Sheets
+          fetch(`${WEB_APP_URL}?code=${encodeURIComponent(code.data)}`)
             .then(res => res.json())
             .then(data => {
               document.getElementById('productName').value = data.productName;
@@ -100,25 +136,11 @@
               alert("ดึงชื่อสินค้าล้มเหลว");
               document.getElementById('loadingName').style.display = 'none';
             });
-        },
-        (errorMessage) => { /* ปล่อยให้ระบบค้นหาเฟรมต่อไปต่อเนื่อง */ }
-      ).then(() => {
-        btnStart.style.display = "none";
-        btnStop.style.display = "block";
-      }).catch(err => {
-        alert("ไม่สามารถเปิดกล้องได้: " + err);
-      });
-    });
-
-    btnStop.addEventListener('click', stopScanner);
-    
-    function stopScanner() {
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().then(() => {
-          btnStart.style.display = "block";
-          btnStop.style.display = "none";
-          document.getElementById('reader').innerHTML = ''; // เคลียร์หน้าจอแคนวาส
-        }).catch(err => console.error(err));
+          return;
+        }
+      }
+      if (scanning) {
+        requestAnimationFrame(tick);
       }
     }
 

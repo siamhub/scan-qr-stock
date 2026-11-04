@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ระบบสแกน QR Code บันทึกสินค้า</title>
-  <!-- โหลดไลบรารีผ่าน CDN ที่เสถียรที่สุด -->
   <script src="https://cloudflare.com"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; max-width: 450px; margin: auto; background-color: #f4f6f9; color: #333; }
@@ -20,11 +19,16 @@
     .btn-stop { background: #dc3545; color: white; display: none; margin-bottom: 10px; }
     .btn-submit { background: #1a73e8; color: white; margin-top: 10px; box-shadow: 0 2px 4px rgba(26,115,232,0.3); }
     .loading-text { color: #f39c12; font-size: 14px; font-style: italic; display: none; }
+    /* กล่องแสดงสถานะเพื่อหาจุดเสีย */
+    #debug-log { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 15px; font-family: monospace; display: none; white-space: pre-wrap; }
   </style>
 </head>
 <body>
 
   <h3>🎥 ระบบสแกน QR Code สดผ่านเว็บ</h3>
+  
+  <!-- แสดงปัญหาทางเทคนิค -->
+  <div id="debug-log"></div>
   
   <div id="video-container">
     <video id="video" playsinline></video>
@@ -54,27 +58,39 @@
   </form>
 
   <script>
-    const WEB_APP_URL = "https://google.com"; 
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXWBeHnUNvztQESMyGi0KM1GCM_OVkkn4DtBxOkExE7-1X3Z3HprBdO02Ge9n6FUTU/exec"; 
 
     const video = document.getElementById("video");
     const videoContainer = document.getElementById("video-container");
     const btnStart = document.getElementById("btnStart");
     const btnStop = document.getElementById("btnStop");
+    const debugLog = document.getElementById("debug-log");
     
     let localStream = null;
     let scanning = false;
     let canvasElement = document.createElement("canvas");
     let canvasCtx = canvasElement.getContext("2d");
 
+    function logError(msg) {
+      debugLog.style.display = "block";
+      debugLog.innerText += msg + "\n";
+    }
+
+    // ตรวจสอบเบื้องต้นว่าระบบมีไลบรารีครบไหม
+    window.addEventListener('DOMContentLoaded', function() {
+      if (typeof jsQR === 'undefined') {
+        logError("❌ Error: โหลดไลบรารี jsQR ไม่สำเร็จ! ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต");
+      }
+      if (window.location.protocol === 'file:') {
+        logError("⚠️ Warning: คุณเปิดไฟล์แบบ file:// บราวเซอร์จะบล็อกการอ่านรหัสพิกเซลภาพ ให้เปลี่ยนไปรันบนเว็บที่เป็น https:// หรือ localhost");
+      }
+    });
+
     btnStart.addEventListener('click', async function() {
       try {
-        // ใช้โครงสร้างดึงกล้องหลังที่เสถียรที่สุด รองรับทั้ง iOS และ Android
+        debugLog.innerText = ""; // ล้าง log เก่า
         const constraints = {
-          video: { 
-            facingMode: "environment",
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          }
+          video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
         };
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -90,7 +106,7 @@
         
         requestAnimationFrame(tick);
       } catch (err) {
-        alert("⚠️ ไม่สามารถเปิดกล้องได้: " + err.name + "\nกรุณาตรวจสอบการตั้งค่าสิทธิ์กล้อง");
+        logError("❌ ไม่สามารถเข้าถึงกล้องได้: " + err.message);
       }
     });
 
@@ -109,41 +125,43 @@
 
     function tick() {
       if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
-        // ดึงสัดส่วนขนาดวิดีโอจริงจากหน้ากล้องเพื่อความแม่นยำสูงในการแกะพิกเซล QR
-        canvasElement.height = video.videoHeight;
-        canvasElement.width = video.videoWidth;
-        
-        canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-        var imageData = canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height);
-        
-        // ฟังก์ชันถอดรหัสภาพเป็นข้อความ
-        var code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code && code.data.trim() !== "") {
-          document.getElementById('productCode').value = code.data;
-          document.getElementById('loadingName').style.display = 'inline';
-          document.getElementById('productName').value = '';
+        try {
+          canvasElement.height = video.videoHeight;
+          canvasElement.width = video.videoWidth;
           
-          stopScanner(); // อ่านสำเร็จแล้ว สั่งปิดกล้องทันที
+          canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+          var imageData = canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height);
+          
+          var code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
 
-          // ยิง API ค้นหาชื่อสินค้า
-          fetch(`${WEB_APP_URL}?code=${encodeURIComponent(code.data)}`)
-            .then(res => res.json())
-            .then(data => {
-              document.getElementById('productName').value = data.productName;
-              document.getElementById('loadingName').style.display = 'none';
-            })
-            .catch(err => {
-              alert("ดึงชื่อสินค้าล้มเหลว หรือ ไม่พบสินค้า");
-              document.getElementById('loadingName').style.display = 'none';
-            });
+          if (code && code.data.trim() !== "") {
+            document.getElementById('productCode').value = code.data;
+            document.getElementById('loadingName').style.display = 'inline';
+            document.getElementById('productName').value = '';
+            
+            stopScanner();
+
+            fetch(`${WEB_APP_URL}?code=${encodeURIComponent(code.data)}`)
+              .then(res => res.json())
+              .then(data => {
+                document.getElementById('productName').value = data.productName;
+                document.getElementById('loadingName').style.display = 'none';
+              })
+              .catch(err => {
+                logError("❌ ดึงข้อมูลจาก Sheets ผิดพลาด: " + err.message);
+                document.getElementById('loadingName').style.display = 'none';
+              });
+            return;
+          }
+        } catch (canvasErr) {
+          logError("❌ บราวเซอร์บล็อกความปลอดภัยภาพ (Security Error): " + canvasErr.message);
+          scanning = false;
           return;
         }
       }
       
-      // หน่วงเวลาการวนลูปสแกนภาพเล็กน้อย (ทุกๆ 60 มิลลิวินาที) เพื่อป้องกันไม่ให้ CPU เครื่องทำงานหนักจนภาพกระตุก
       if (scanning) {
         setTimeout(function() {
           requestAnimationFrame(tick);
@@ -169,9 +187,7 @@
       fetch(WEB_APP_URL, { 
         method: "POST", 
         mode: "no-cors",
-        headers: {
-          "Content-Type": "text/plain"
-        },
+        headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(data) 
       })
       .then(() => {

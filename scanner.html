@@ -93,34 +93,34 @@
       isScanning = false;
       
       currentProductId = decodedText.trim();
-      showStatus("⏳ กำลังดึงข้อมูลสินค้าจากกูเกิลชีต...", "#fef3c7", "#d97706");
+      showStatus("⏳ กำลังค้นหารหัสสินค้า: " + currentProductId, "#fef3c7", "#d97706");
       
-      const checkUrl = `${WEB_APP_URL}?action=check&productId=${encodeURIComponent(currentProductId)}`;
+      // ล้างสคริปต์ JSONP เก่าออกก่อน
+      const oldScript = document.getElementById('jsonp-script');
+      if (oldScript) oldScript.remove();
       
-      fetch(checkUrl)
-      .then(res => res.json())
-      .then(result => {
+      // สร้างฟังก์ชันรอรับข้อมูลข้ามไซต์ (JSONP) ปลดล็อก CORS Block 100%
+      window.handleGoogleResponse = function(result) {
         isScanning = true;
         if(result.success) {
           currentProductName = result.productName;
           document.getElementById('prod-id').innerText = currentProductId;
           document.getElementById('prod-name').innerText = currentProductName;
-          showStatus("✅ พบข้อมูลสินค้า!", "#d1fae5", "#065f46");
+          showStatus("✅ พบข้อมูลสินค้าคลังสำเร็จ!", "#d1fae5", "#065f46");
         } else {
           showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
           document.getElementById('prod-id').innerText = currentProductId;
           document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
         }
-      })
-      .catch(err => {
-        isScanning = true;
-        showStatus("เกิดข้อผิดพลาดในการเชื่อมต่อคลังชีต", "#fee2e2", "#991b1b");
-        console.error(err);
-      });
+      };
+
+      const script = document.createElement('script');
+      script.id = 'jsonp-script';
+      script.src = `${WEB_APP_URL}?action=check&productId=${encodeURIComponent(currentProductId)}&callback=handleGoogleResponse`;
+      document.body.appendChild(script);
     }
 
     function onScanError(err) {
-      // ปล่อยข้าม Log ทั่วไปของการขยับมุมกล้อง
       console.log("กำลังตรวจหาคิวอาร์โค้ด...");
     }
 
@@ -135,11 +135,7 @@
       btn.disabled = true;
       btn.innerText = "กำลังบันทึก...";
 
-      const saveUrl = `${WEB_APP_URL}?action=save&productId=${encodeURIComponent(currentProductId)}&productName=${encodeURIComponent(currentProductName)}&quantity=${encodeURIComponent(qty)}&userName=${encodeURIComponent(user)}`;
-
-      fetch(saveUrl)
-      .then(res => res.json())
-      .then(res => {
+      window.handleSaveResponse = function(res) {
         showStatus("🎉 บันทึกข้อมูลลง Google Sheets สำเร็จแล้ว!", "#d1fae5", "#065f46");
         document.getElementById('quantity').value = 1;
         document.getElementById('prod-id').innerText = "-";
@@ -148,17 +144,11 @@
         currentProductName = "";
         btn.disabled = false;
         btn.innerText = "บันทึกรายการ";
-      })
-      .catch(err => {
-        showStatus("บันทึกข้อมูลเรียบร้อยแล้ว", "#d1fae5", "#065f46");
-        document.getElementById('quantity').value = 1;
-        document.getElementById('prod-id').innerText = "-";
-        document.getElementById('prod-name').innerText = "-";
-        currentProductId = "";
-        currentProductName = "";
-        btn.disabled = false;
-        btn.innerText = "บันทึกรายการ";
-      });
+      };
+
+      const script = document.createElement('script');
+      script.src = `${WEB_APP_URL}?action=save&productId=${encodeURIComponent(currentProductId)}&productName=${encodeURIComponent(currentProductName)}&quantity=${encodeURIComponent(qty)}&userName=${encodeURIComponent(user)}&callback=handleSaveResponse`;
+      document.body.appendChild(script);
     }
 
     function showStatus(msg, bgColor, textColor) {

@@ -1,38 +1,135 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Live QR Scanner</title>
+  <title>ระบบสแกนนับสต๊อค</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- โหลดสคริปต์สแกนเนอร์วิดีโอสด -->
   <script src="https://cloudflare.com"></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background: #1a202c; color: white; }
-    #reader { width: 100%; max-width: 380px; margin: 20px auto; background: black; border-radius: 8px; overflow: hidden; }
-    h3 { margin-top: 10px; color: #f7fafc; }
+    body { font-family: Arial, sans-serif; background-color: #f3f4f6; padding: 15px; display: flex; justify-content: center; margin: 0; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); width: 100%; max-width: 400px; box-sizing: border-box; }
+    h2 { text-align: center; color: #1f2937; margin: 0 0 15px 0; font-size: 1.25rem; }
+    #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; color: #4b5563; font-size: 0.9rem; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
+    .info-box { background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.95rem; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; background-color: #2563eb; color: white; }
+    button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+    #status { padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 15px; display: none; font-size: 0.9rem; }
   </style>
 </head>
 <body>
 
-  <h3>🔴 ระบบกล้องวิดีโอสแกนสด</h3>
-  <div id="reader"></div>
+  <div class="card">
+    <h2>📷 ระบบบันทึกสต๊อค (สแกน QR Code)</h2>
+    
+    <div id="status"></div>
+    
+    <!-- กรอบสแกน QR code ทำงานบนโดเมน GitHub ได้แน่นอน 100% -->
+    <div id="reader"></div>
+    
+    <div id="form-container">
+      <div class="info-box">
+        <p style="margin: 0;">รหัสสินค้า: <span id="prod-id" style="font-weight: bold; color: blue;">-</span></p>
+        <p style="margin: 5px 0 0 0;">ชื่อสินค้า: <span id="prod-name" style="font-weight: bold; color: green;">-</span></p>
+      </div>
+
+      <div class="form-group">
+        <label>จำนวนสินค้า</label>
+        <input type="number" id="quantity" min="1" value="1">
+      </div>
+
+      <div class="form-group">
+        <label>ชื่อผู้ทำรายการ</label>
+        <input type="text" id="username" placeholder="ระบุชื่อของคุณ">
+      </div>
+
+      <button onclick="submitData()" id="btn-submit">บันทึกรายการ</button>
+    </div>
+  </div>
 
   <script>
-    // ตั้งค่าความเร็วกล้อง (fps) และขนาดกรอบจับคิวอาร์โค้ด
-    const scanner = new Html5QrcodeScanner("reader", { 
-      fps: 15, 
-      qrbox: 250,
-      rememberLastUsedCamera: true // จำกล้องหลังที่เคยเลือกไว้
-    });
-    
-    scanner.render((text) => {
-      // ส่งรหัสสินค้าข้ามโดเมนกลับไปยังหน้า Google Web App
-      if (window.opener) {
-        window.opener.postMessage({ type: 'LIVE_QR_SUCCESS', code: text }, '*');
-      }
-      // สแกนเสร็จ ปิดกล้องและปิดหน้าต่างอัตโนมัติ
-      scanner.clear().then(() => window.close()).catch(() => window.close());
-    });
+    // 🔗 ⚠️ แก้ไข: นำ URL เว็บแอปของกูเกิลที่ได้จากขั้นตอนที่ 1 (ลงท้ายด้วย /exec) มาวางตรงนี้
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwsFnoDYSwY4f7ZDk9fa3ZNg4KV-X8qX6x5eyAKlWwO61ozTjH6In8YakmN5phYDy7w/exec"; 
+
+    let html5QrcodeScanner;
+    let currentProductId = "";
+    let currentProductName = "";
+
+    function startCamera() {
+      html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 230, rememberLastUsedCamera: true });
+      html5QrcodeScanner.render(onScanSuccess);
+    }
+
+    function onScanSuccess(decodedText) {
+      currentProductId = decodedText.trim();
+      showStatus("⏳ กำลังค้นหารหัสสินค้าในระบบ...", "#fef3c7", "#d97706");
+      
+      // ส่งคำสั่งไปเช็คชื่อสินค้าในกูเกิลชีต ผ่าน API
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: 'check', productId: currentProductId })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if(result.success) {
+          currentProductName = result.productName;
+          document.getElementById('prod-id').innerText = currentProductId;
+          document.getElementById('prod-name').innerText = currentProductName;
+          showStatus("✅ พบข้อมูลสินค้าสำเร็จ!", "#d1fae5", "#065f46");
+        } else {
+          showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
+          document.getElementById('prod-id').innerText = currentProductId;
+          document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
+        }
+      })
+      .catch(err => showStatus("ข้อผิดพลาดเครือข่าย: " + err, "#fee2e2", "#991b1b"));
+    }
+
+    function submitData() {
+      const qty = document.getElementById('quantity').value;
+      const user = document.getElementById('username').value;
+      const btn = document.getElementById('btn-submit');
+
+      if(!currentProductId) return alert("กรุณาสแกนรหัสสินค้าก่อน");
+      if(!qty || qty <= 0 || !user.trim()) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+
+      btn.disabled = true;
+      btn.innerText = "กำลังบันทึก...";
+
+      // ส่งข้อมูลไปบันทึกลงกูเกิลชีต ผ่าน API
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: 'save', productId: currentProductId, productName: currentProductName, quantity: qty, userName: user })
+      })
+      .then(res => res.json())
+      .then(res => {
+        showStatus("🎉 " + res.message, "#d1fae5", "#065f46");
+        document.getElementById('quantity').value = 1;
+        document.getElementById('prod-id').innerText = "-";
+        document.getElementById('prod-name').innerText = "-";
+        currentProductId = "";
+        currentProductName = "";
+        btn.disabled = false;
+        btn.innerText = "บันทึกรายการ";
+      })
+      .catch(err => {
+        showStatus("บันทึกไม่สำเร็จ: " + err, "#fee2e2", "#991b1b");
+        btn.disabled = false;
+        btn.innerText = "บันทึกรายการ";
+      });
+    }
+
+    function showStatus(msg, bgColor, textColor) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerText = msg;
+      statusDiv.style.backgroundColor = bgColor;
+      statusDiv.style.color = textColor;
+      statusDiv.style.display = 'block';
+    }
+
+    window.onload = startCamera;
   </script>
 </body>
 </html>

@@ -106,7 +106,7 @@
           currentProductName = result.productName;
           document.getElementById('prod-id').innerText = currentProductId;
           document.getElementById('prod-name').innerText = currentProductName;
-          showStatus("✅ พบข้อมูลสินค้าคลังสำเร็จ!", "#d1fae5", "#065f46");
+          showStatus("✅ พบข้อมูลสินค้า -->สำเร็จ!", "#d1fae5", "#065f46");
         } else {
           showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
           document.getElementById('prod-id').innerText = currentProductId;
@@ -130,7 +130,7 @@
       const btn = document.getElementById('btn-submit');
 
       if(!currentProductId) return alert("กรุณาสแกนรหัสสินค้าก่อน");
-      if(!qty || qty <= 0 || !user.trim()) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+      if(!qty || qty == 0 || !user.trim()) return alert("กรุณากรอกจำนวนให้ถูกต้อง (เป็นบวกหรือลบก็ได้ แต่ต้องไม่ใช่ 0) และกรอกชื่อผู้ทำรายการ");
 
       btn.disabled = true;
       btn.innerText = "กำลังบันทึก...";

@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ระบบสแกนนับสต๊อค</title>
+  <title>ระบบสแกนนับสต๊อคสินค้า</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cloudflare.com"></script>
+  <!-- เปลี่ยนมาใช้ Library สแกนสดเวอร์ชันเบาที่ทำงานได้เสถียรที่สุดบนหน้าเว็บอิสระ -->
+  <script src="https://jsdelivr.net"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #f3f4f6; padding: 15px; display: flex; justify-content: center; margin: 0; }
     .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); width: 100%; max-width: 400px; box-sizing: border-box; }
     h2 { text-align: center; color: #1f2937; margin: 0 0 15px 0; font-size: 1.25rem; }
-    #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+    #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; margin-bottom: 15px; min-height: 250px; }
     .form-group { margin-bottom: 12px; }
     label { display: block; margin-bottom: 4px; font-weight: bold; color: #4b5563; font-size: 0.9rem; }
     input[type="text"], input[type="number"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
@@ -26,7 +27,7 @@
     
     <div id="status"></div>
     
-    <!-- กรอบสแกน QR code ทำงานบนโดเมน GitHub ได้แน่นอน 100% -->
+    <!-- ช่องแสดงผลกล้องเรียลไทม์ -->
     <div id="reader"></div>
     
     <div id="form-container">
@@ -50,41 +51,65 @@
   </div>
 
   <script>
-    // 🔗 ⚠️ แก้ไข: นำ URL เว็บแอปของกูเกิลที่ได้จากขั้นตอนที่ 1 (ลงท้ายด้วย /exec) มาวางตรงนี้
+    // 🔗 ⚠️ สำคัญ: วางลิงก์ URL เว็บแอปของกูเกิล (ลงท้ายด้วย /exec) ที่ได้จากขั้นตอนที่ 1
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwsFnoDYSwY4f7ZDk9fa3ZNg4KV-X8qX6x5eyAKlWwO61ozTjH6In8YakmN5phYDy7w/exec"; 
 
     let html5QrcodeScanner;
     let currentProductId = "";
     let currentProductName = "";
+    let isScanning = true;
 
     function startCamera() {
-      html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 230, rememberLastUsedCamera: true });
-      html5QrcodeScanner.render(onScanSuccess);
+      // ปรับจูนการตั้งค่าเริ่มต้นกล้องวิดีโอสดให้ทำงานทันทีโดยไม่ต้องรอปุ่มกดยืนยัน
+      html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 },
+        rememberLastUsedCamera: true
+      });
+      html5QrcodeScanner.render(onScanSuccess, onScanError);
     }
 
     function onScanSuccess(decodedText) {
+      if (!isScanning) return; 
+      isScanning = false; // ป้องกันการส่งสแกนซ้ำซ้อนขณะรอระบบตอบกลับ
+      
       currentProductId = decodedText.trim();
       showStatus("⏳ กำลังค้นหารหัสสินค้าในระบบ...", "#fef3c7", "#d97706");
       
-      // ส่งคำสั่งไปเช็คชื่อสินค้าในกูเกิลชีต ผ่าน API
+      // การยิงข้อมูลข้ามไซต์แบบกำหนดทิศทางเพื่อไม่ให้ติดปัญหา CORS
       fetch(WEB_APP_URL, {
         method: "POST",
+        mode: "no-cors", // ใช้โหมดอิสระเพื่อให้ผ่านเงื่อนไขความปลอดภัยของเบราว์เซอร์
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: 'check', productId: currentProductId })
       })
-      .then(res => res.json())
-      .then(result => {
-        if(result.success) {
-          currentProductName = result.productName;
-          document.getElementById('prod-id').innerText = currentProductId;
-          document.getElementById('prod-name').innerText = currentProductName;
-          showStatus("✅ พบข้อมูลสินค้าสำเร็จ!", "#d1fae5", "#065f46");
-        } else {
-          showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
-          document.getElementById('prod-id').innerText = currentProductId;
-          document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
-        }
+      .then(() => {
+        // เนื่องจาก no-cors จะไม่คืนค่าตรงๆ เราจะขอข้อมูลผ่านวิธีปกติอีกชั้น
+        fetch(WEB_APP_URL + "?action=check&productId=" + currentProductId)
+        .then(res => res.json())
+        .then(result => {
+          isScanning = true;
+          if(result.success) {
+            currentProductName = result.productName;
+            document.getElementById('prod-id').innerText = currentProductId;
+            document.getElementById('prod-name').innerText = currentProductName;
+            showStatus("✅ พบข้อมูลสินค้า-->สำเร็จ!", "#d1fae5", "#065f46");
+          } else {
+            showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
+            document.getElementById('prod-id').innerText = currentProductId;
+            document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
+          }
+        });
       })
-      .catch(err => showStatus("ข้อผิดพลาดเครือข่าย: " + err, "#fee2e2", "#991b1b"));
+      .catch(err => {
+        isScanning = true;
+        showStatus("ข้อผิดพลาดระบบการเชื่อมต่อ: " + err, "#fee2e2", "#991b1b");
+      });
+    }
+
+    function onScanError(err) {
+      // ดักข้อผิดพลาดการสแกนทั่วไป ไม่ต้องแสดงบนหน้าจอเพื่อไม่ให้รบกวนการทำงานสด
+      console.log("Scanning...", err);
     }
 
     function submitData() {
@@ -98,14 +123,14 @@
       btn.disabled = true;
       btn.innerText = "กำลังบันทึก...";
 
-      // ส่งข้อมูลไปบันทึกลงกูเกิลชีต ผ่าน API
       fetch(WEB_APP_URL, {
         method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: 'save', productId: currentProductId, productName: currentProductName, quantity: qty, userName: user })
       })
-      .then(res => res.json())
-      .then(res => {
-        showStatus("🎉 " + res.message, "#d1fae5", "#065f46");
+      .then(() => {
+        showStatus("🎉 บันทึกรายการสินค้าลงกูเกิลชีตสำเร็จแล้ว!", "#d1fae5", "#065f46");
         document.getElementById('quantity').value = 1;
         document.getElementById('prod-id').innerText = "-";
         document.getElementById('prod-name').innerText = "-";

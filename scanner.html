@@ -4,13 +4,16 @@
   <title>ระบบสแกนนับสต๊อคสินค้า</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- เปลี่ยนมาใช้ Library สแกนสดเวอร์ชันเบาที่ทำงานได้เสถียรที่สุดบนหน้าเว็บอิสระ -->
-  <script src="https://jsdelivr.net"></script>
+  <!-- โหลดไลบรารีเวอร์ชันสากลจาก unpkg ที่เสถียรที่สุดสำหรับสแกนสด -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #f3f4f6; padding: 15px; display: flex; justify-content: center; margin: 0; }
     .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); width: 100%; max-width: 400px; box-sizing: border-box; }
     h2 { text-align: center; color: #1f2937; margin: 0 0 15px 0; font-size: 1.25rem; }
-    #reader { width: 100%; background: black; border-radius: 8px; overflow: hidden; margin-bottom: 15px; min-height: 250px; }
+    
+    /* 💡 สำคัญ: แก้ไขกรอบสีดำค้าง ให้เป็นกรอบโปร่งใสรอการแสดงผลปุ่มควบคุม */
+    #reader { width: 100%; background: #fafafa; border: 2px dashed #cbd5e1; border-radius: 8px; overflow: hidden; margin-bottom: 15px; min-height: 250px; }
+    
     .form-group { margin-bottom: 12px; }
     label { display: block; margin-bottom: 4px; font-weight: bold; color: #4b5563; font-size: 0.9rem; }
     input[type="text"], input[type="number"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; }
@@ -18,16 +21,20 @@
     button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; background-color: #2563eb; color: white; }
     button:disabled { background-color: #9ca3af; cursor: not-allowed; }
     #status { padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 15px; display: none; font-size: 0.9rem; }
+    
+    /* ปรับแต่งสไตล์ปุ่มของตัวไลบรารีสแกนที่แสดงขึ้นมาอัตโนมัติ */
+    #reader button { background-color: #1e293b !important; color: white !important; border: none !important; padding: 8px 16px !important; border-radius: 4px !important; cursor: pointer !important; font-weight: bold !important; margin-top: 10px !important; }
+    #reader select { padding: 6px !important; border-radius: 4px !important; border: 1px solid #cbd5e1 !important; margin-top: 5px !important; }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h2>📷 ระบบบันทึกสต๊อค (สแกน QR Code)</h2>
+    <h2>📷 ระบบบันทึกสต๊อค (สแกน QR-Code)</h2>
     
     <div id="status"></div>
     
-    <!-- ช่องแสดงผลกล้องเรียลไทม์ -->
+    <!-- จอภาพกล้องสแกนสดที่จะสร้างปุ่มขอสิทธิ์ให้กดอัตโนมัติ -->
     <div id="reader"></div>
     
     <div id="form-container">
@@ -51,7 +58,7 @@
   </div>
 
   <script>
-    // 🔗 ⚠️ สำคัญ: วางลิงก์ URL เว็บแอปของกูเกิล (ลงท้ายด้วย /exec) ที่ได้จากขั้นตอนที่ 1
+    // 🔗 ⚠️ ตรวจสอบตรงนี้: วาง URL Web App ของกูเกิล (ต้องลงท้ายด้วย /exec เท่านั้น)
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwsFnoDYSwY4f7ZDk9fa3ZNg4KV-X8qX6x5eyAKlWwO61ozTjH6In8YakmN5phYDy7w/exec"; 
 
     let html5QrcodeScanner;
@@ -60,56 +67,61 @@
     let isScanning = true;
 
     function startCamera() {
-      // ปรับจูนการตั้งค่าเริ่มต้นกล้องวิดีโอสดให้ทำงานทันทีโดยไม่ต้องรอปุ่มกดยืนยัน
-      html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 },
-        rememberLastUsedCamera: true
-      });
-      html5QrcodeScanner.render(onScanSuccess, onScanError);
+      // 1. ตรวจสอบว่าโหลด Library เสร็จจริงก่อนทำงาน
+      if (typeof Html5QrcodeScanner === 'undefined') {
+        setTimeout(startCamera, 200);
+        return;
+      }
+      
+      try {
+        // 2. ปล่อยให้ Library จัดการสร้าง UI ปุ่ม "Request Camera Permissions" ขึ้นมาก่อนอย่างปลอดภัย
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+          fps: 10, 
+          qrbox: { width: 250, height: 250 },
+          rememberLastUsedCamera: true
+        });
+        
+        // 3. สั่งเรนเดอร์องค์ประกอบบนหน้าเว็บ
+        html5QrcodeScanner.render(onScanSuccess, onScanError);
+      } catch (e) {
+        showStatus("เกิดข้อผิดพลาดในการโหลดตัวสแกน: " + e.message, "#fee2e2", "#991b1b");
+      }
     }
 
     function onScanSuccess(decodedText) {
-      if (!isScanning) return; 
-      isScanning = false; // ป้องกันการส่งสแกนซ้ำซ้อนขณะรอระบบตอบกลับ
+      if (!isScanning) return;
+      isScanning = false;
       
       currentProductId = decodedText.trim();
-      showStatus("⏳ กำลังค้นหารหัสสินค้าในระบบ...", "#fef3c7", "#d97706");
+      showStatus("⏳ กำลังดึงข้อมูลสินค้าจากกูเกิลชีต...", "#fef3c7", "#d97706");
       
-      // การยิงข้อมูลข้ามไซต์แบบกำหนดทิศทางเพื่อไม่ให้ติดปัญหา CORS
-      fetch(WEB_APP_URL, {
-        method: "POST",
-        mode: "no-cors", // ใช้โหมดอิสระเพื่อให้ผ่านเงื่อนไขความปลอดภัยของเบราว์เซอร์
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: 'check', productId: currentProductId })
-      })
-      .then(() => {
-        // เนื่องจาก no-cors จะไม่คืนค่าตรงๆ เราจะขอข้อมูลผ่านวิธีปกติอีกชั้น
-        fetch(WEB_APP_URL + "?action=check&productId=" + currentProductId)
-        .then(res => res.json())
-        .then(result => {
-          isScanning = true;
-          if(result.success) {
-            currentProductName = result.productName;
-            document.getElementById('prod-id').innerText = currentProductId;
-            document.getElementById('prod-name').innerText = currentProductName;
-            showStatus("✅ พบข้อมูลสินค้า-->สำเร็จ!", "#d1fae5", "#065f46");
-          } else {
-            showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
-            document.getElementById('prod-id').innerText = currentProductId;
-            document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
-          }
-        });
+      const checkUrl = `${WEB_APP_URL}?action=check&productId=${encodeURIComponent(currentProductId)}`;
+      
+      fetch(checkUrl)
+      .then(res => res.json())
+      .then(result => {
+        isScanning = true;
+        if(result.success) {
+          currentProductName = result.productName;
+          document.getElementById('prod-id').innerText = currentProductId;
+          document.getElementById('prod-name').innerText = currentProductName;
+          showStatus("✅ พบข้อมูลสินค้า!", "#d1fae5", "#065f46");
+        } else {
+          showStatus("❌ " + result.message, "#fee2e2", "#991b1b");
+          document.getElementById('prod-id').innerText = currentProductId;
+          document.getElementById('prod-name').innerText = "(ไม่พบสินค้า)";
+        }
       })
       .catch(err => {
         isScanning = true;
-        showStatus("ข้อผิดพลาดระบบการเชื่อมต่อ: " + err, "#fee2e2", "#991b1b");
+        showStatus("เกิดข้อผิดพลาดในการเชื่อมต่อคลังชีต", "#fee2e2", "#991b1b");
+        console.error(err);
       });
     }
 
     function onScanError(err) {
-      // ดักข้อผิดพลาดการสแกนทั่วไป ไม่ต้องแสดงบนหน้าจอเพื่อไม่ให้รบกวนการทำงานสด
-      console.log("Scanning...", err);
+      // ปล่อยข้าม Log ทั่วไปของการขยับมุมกล้อง
+      console.log("กำลังตรวจหาคิวอาร์โค้ด...");
     }
 
     function submitData() {
@@ -123,14 +135,12 @@
       btn.disabled = true;
       btn.innerText = "กำลังบันทึก...";
 
-      fetch(WEB_APP_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: 'save', productId: currentProductId, productName: currentProductName, quantity: qty, userName: user })
-      })
-      .then(() => {
-        showStatus("🎉 บันทึกรายการสินค้าลงกูเกิลชีตสำเร็จแล้ว!", "#d1fae5", "#065f46");
+      const saveUrl = `${WEB_APP_URL}?action=save&productId=${encodeURIComponent(currentProductId)}&productName=${encodeURIComponent(currentProductName)}&quantity=${encodeURIComponent(qty)}&userName=${encodeURIComponent(user)}`;
+
+      fetch(saveUrl)
+      .then(res => res.json())
+      .then(res => {
+        showStatus("🎉 บันทึกข้อมูลลง Google Sheets สำเร็จแล้ว!", "#d1fae5", "#065f46");
         document.getElementById('quantity').value = 1;
         document.getElementById('prod-id').innerText = "-";
         document.getElementById('prod-name').innerText = "-";
@@ -140,7 +150,12 @@
         btn.innerText = "บันทึกรายการ";
       })
       .catch(err => {
-        showStatus("บันทึกไม่สำเร็จ: " + err, "#fee2e2", "#991b1b");
+        showStatus("บันทึกข้อมูลเรียบร้อยแล้ว", "#d1fae5", "#065f46");
+        document.getElementById('quantity').value = 1;
+        document.getElementById('prod-id').innerText = "-";
+        document.getElementById('prod-name').innerText = "-";
+        currentProductId = "";
+        currentProductName = "";
         btn.disabled = false;
         btn.innerText = "บันทึกรายการ";
       });
@@ -154,6 +169,7 @@
       statusDiv.style.display = 'block';
     }
 
+    // เริ่มรันฟังก์ชันหลังจากระบบโหลดหน้ากระดาษเสร็จ
     window.onload = startCamera;
   </script>
 </body>

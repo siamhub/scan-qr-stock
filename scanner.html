@@ -2,21 +2,35 @@
 <html>
 <head>
   <title>Live QR Scanner</title>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- โหลดสคริปต์สแกนเนอร์วิดีโอสด -->
   <script src="https://cloudflare.com"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background: #1a202c; color: white; }
     #reader { width: 100%; max-width: 380px; margin: 20px auto; background: black; border-radius: 8px; overflow: hidden; }
+    h3 { margin-top: 10px; color: #f7fafc; }
   </style>
 </head>
 <body>
+
   <h3>🔴 ระบบกล้องวิดีโอสแกนสด</h3>
   <div id="reader"></div>
+
   <script>
-    const scanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: 250 });
+    // ตั้งค่าความเร็วกล้อง (fps) และขนาดกรอบจับคิวอาร์โค้ด
+    const scanner = new Html5QrcodeScanner("reader", { 
+      fps: 15, 
+      qrbox: 250,
+      rememberLastUsedCamera: true // จำกล้องหลังที่เคยเลือกไว้
+    });
+    
     scanner.render((text) => {
-      // ส่งรหัสข้ามโดเมนกลับไปยังหน้า Google Web App หลัก ปลดล็อก Sandbox ชัดเจน
-      window.opener.postMessage({ type: 'LIVE_QR_SUCCESS', code: text }, '*');
+      // ส่งรหัสสินค้าข้ามโดเมนกลับไปยังหน้า Google Web App
+      if (window.opener) {
+        window.opener.postMessage({ type: 'LIVE_QR_SUCCESS', code: text }, '*');
+      }
+      // สแกนเสร็จ ปิดกล้องและปิดหน้าต่างอัตโนมัติ
       scanner.clear().then(() => window.close()).catch(() => window.close());
     });
   </script>

@@ -36,18 +36,31 @@
     
     <!-- จอภาพกล้องสแกนสดที่จะสร้างปุ่มขอสิทธิ์ให้กดอัตโนมัติ -->
     <div id="reader"></div>
-    
+
     <div id="form-container">
       <div class="info-box">
         <p style="margin: 0;">รหัสสินค้า: <span id="prod-id" style="font-weight: bold; color: blue;">-</span></p>
         <p style="margin: 5px 0 0 0;">ชื่อสินค้า: <span id="prod-name" style="font-weight: bold; color: green;">-</span></p>
       </div>
 
+      <!-- 1. ย้ายกล่องเลือกสถานะสินค้า มาไว้เป็นลำดับแรกสุดตรงนี้ -->
+      <div class="form-group">
+        <label>สถานะของสินค้า</label>
+        <select id="product-status" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; background-color: white;">
+          <option value="FG">FG (สินค้าสำเร็จรูป)</option>
+          <option value="RM">RM (วัตถุดิบ)</option>
+          <option value="WIP">WIP (สินค้าระหว่างผลิต)</option>
+          <option value="N/A" selected>N/A (อื่นๆ / ไม่ระบุ)</option>
+        </select>
+      </div>
+
+      <!-- 2. ช่องกรอกจำนวนสินค้า จะถูกเลื่อนลงมาอยู่ตรงนี้ -->
       <div class="form-group">
         <label>จำนวนสินค้า</label>
         <input type="number" id="quantity" value="1">
       </div>
 
+      <!-- 3. ช่องกรอกชื่อผู้ทำรายการ อยู่ลำดับสุดท้ายตามเดิม -->
       <div class="form-group">
         <label>ชื่อผู้ทำรายการ</label>
         <input type="text" id="username" placeholder="ระบุชื่อของคุณ">
